@@ -4,7 +4,7 @@ import re
 import threading
 
 # --- Configuration ---
-BOT_TOKEN = '8294313536:AAEbstNMHutpUDxUwaxvwJleW4wAxiLAoio'
+BOT_TOKEN = '8370162147:AAEGCB-lvEH6R7NXDdU-67ALJCBl4mpiShE'
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/editMessageText"
 
 app = Flask(__name__)
